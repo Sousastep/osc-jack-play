@@ -1,20 +1,15 @@
-
-
-
 # osc-jack-play
 
 A small C client for a Raspberry Pi (raspios trixie, e.g. the
 `rnbooscquery` image) that plays WAV files through `jack-play(1)` whenever it
-receives an OSC message. Vibecoded with freebuff.
+receives an OSC message. (Vibecoded with freebuff)
 
-| ![osc-jack-play-example](./osc-jack-play-example.webp) | 
-|:--:| 
-| *osc-jack-play-example.rnbopat* |
+The following video is an example of osc-jack-play in use with SousaFX:
+<video src="https://github.com/user-attachments/assets/79124579-5660-46a3-9e36-33541736bbdf" width="600" controls></video>
 
-| <video src="https://github.com/user-attachments/assets/79124579-5660-46a3-9e36-33541736bbdf
-" width="600" controls></video> | 
-|:--:| 
-| *using osc-jack-play with SousaFX* |
+And here is a picture of a minimal rnbo patcher that can interact with osc-jack-play, included in this repo as `osc-jack-play-example.rnbopat`:
+
+![osc-jack-play-example](./osc-jack-play-example.webp)
 
 ```
 /play <index>   →  spawns  jack-play <wavfile[i]>   (ignored if already playing)
@@ -80,12 +75,12 @@ make
 ./osc-jack-play -c 'patchername-0:in%d' sound1.wav sound2.wav sound3.wav etc.wav
 ```
 
+* Indices are **0-based** (`/play 0` .. `/play 3`); pass `-1` for 1-based.
 * Listens on UDP port **7000** (change with `-p PORT`).
 * `-c 'system:playback_%d'` makes `jack-play` auto-connect file channel 1 →
   `system:playback_1`, channel 2 → `system:playback_2`, etc. Works for mono and
   stereo files. If you omit `-c`, nothing is connected automatically — use
   `jack_connect` or `jack-plumbing` instead.
-* Indices are **0-based** (`/play 0` .. `/play 3`); pass `-1` for 1-based.
 * While a file is playing, new `/play` messages are **ignored** (logged).
 * `jack-play` can read any format libsndfile supports (wav, flac, ogg, aiff).
 * Playback status is sent back over OSC to the RNBO oscquery service
