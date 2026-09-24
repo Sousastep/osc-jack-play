@@ -1,10 +1,18 @@
 # osc-jack-play
 
---- vibecoded with freebuff ---
-
 A small C client for a Raspberry Pi (raspios trixie, e.g. the
 `rnbooscquery` image) that plays WAV files through `jack-play(1)` whenever it
-receives an OSC message.
+receives an OSC message. Vibecoded with freebuff.
+
+[osc-jack-play-example](./osc-jack-play-example.webp)
+
+| ![osc-jack-play-example](./osc-jack-play-example.webp) | 
+|:--:| 
+| *osc-jack-play-example.rnbopat* |
+
+| ![video-example](./video.mp4) | 
+|:--:| 
+| *using osc-jack-play with SousaFX* |
 
 ```
 /play <index>   →  spawns  jack-play <wavfile[i]>   (ignored if already playing)
@@ -12,42 +20,18 @@ receives an OSC message.
 <status>        →  outbound: 1 when playback starts, 0 when it stops
 ```
 
-`jack-play` comes from the Debian `jack-tools` package. It is a lightweight
-JACK sound file player: it creates one output port per channel in the file,
-resamples to the server's sample rate (libsamplerate), and can auto-connect
-via the `JACK_PLAY_CONNECT_TO` environment variable. This client does not link
-against JACK itself — it just spawns `jack-play` subprocesses (one at a time).
-
 ## Files
 
 | File             | Purpose                                              |
 |------------------|------------------------------------------------------|
 | `osc-jack-play.c`| the OSC → jack-play client (C + liblo)               |
 | `Makefile`       | builds the client against liblo                      |
-| `test_osc.py`    | zero-dependency Python OSC test sender               |
 | `install_jack_play.sh` | builds & installs `jack-play` from source      |
 | `osc-jack-play.service` | systemd unit for running the client as a service |
+| `osc-jack-play-example.rnbopat` | example patcher to export to rpi |
+
 
 ## Install `jack-play` (the `jack-tools` package is gone from trixie)
-
-The `jack-tools` package — which provides `jack-play` — was removed from the
-Debian trixie release, so `sudo apt install jack-tools` fails on Raspberry Pi
-OS trixie with *"has no installation candidate"*. Two ways to get `jack-play`:
-
-**Option A — install the prebuilt Debian bookworm binary (recommended):**
-
-```bash
-curl -sSL -o jack-tools.deb https://deb.debian.org/debian/pool/main/j/jack-tools/jack-tools_20131226-1.1_arm64.deb
-sudo apt install -y ./jack-tools.deb
-jack-play -h     # verify
-```
-
-`apt` resolves the runtime dependencies (libjack, libsndfile, libsamplerate,
-liblo, ncurses) from the trixie repos automatically. This installs the whole
-`jack-tools` set (jack-play, jack-plumbing, jack-osc, ...). If your Pi is
-32-bit (armhf) instead of arm64, use `jack-tools_20131226-1.1_armhf.deb`.
-
-**Option B — build `jack-play` from source:**
 
 ```bash
 ./install_jack_play.sh
@@ -56,6 +40,17 @@ liblo, ncurses) from the trixie repos automatically. This installs the whole
 This downloads the upstream source from the Debian pool, builds just
 `jack-play` (needs `build-essential libjack-jackd2-dev libsndfile1-dev
 libsamplerate0-dev`), and installs it to `/usr/local/bin`.
+
+`jack-play` comes from the Debian `jack-tools` package. It is a lightweight
+JACK sound file player: it creates one output port per channel in the file,
+resamples to the server's sample rate (libsamplerate), and can auto-connect
+via the `JACK_PLAY_CONNECT_TO` environment variable. This client does not link
+against JACK itself — it just spawns `jack-play` subprocesses (one at a time).
+
+The `jack-tools` package — which provides `jack-play` — was removed from the
+Debian trixie release, so `sudo apt install jack-tools` fails on Raspberry Pi
+OS trixie with *"has no installation candidate"*, which is why it must be 
+built from source for use with RNBO.
 
 ## Install the rest of the dependencies (on the Pi)
 
@@ -73,20 +68,14 @@ RNBO); `liblo-dev` provides the OSC library. Check with `which jack-play`.
 make
 ```
 
-## Start JACK (if not already running)
+## Test via CLI
 
 ```bash
-# example: ALSA backend, 48 kHz, 128 frames/period
-jackd -d alsa -r 48000 -p 128 &
-```
+# auto-connects to main outputs
+./osc-jack-play -c 'system:playback_%d' sound1.wav sound2.wav sound3.wav etc.wav
 
-If your image runs JACK via pipewire (`pipewire-jack`) instead, make sure it
-is started before the client and that `jack-play` can connect.
-
-## Run
-
-```bash
-./osc-jack-play -c 'system:playback_%d' sound1.wav sound2.wav sound3.wav sound4.wav
+#auto-connect to patcher inputs
+./osc-jack-play -c 'patchername-0:in%d' sound1.wav sound2.wav sound3.wav etc.wav
 ```
 
 * Listens on UDP port **7000** (change with `-p PORT`).
@@ -100,30 +89,7 @@ is started before the client and that `jack-play` can connect.
 * Playback status is sent back over OSC to the RNBO oscquery service
   (`--rnbo-host` / `--rnbo-port`): an int `1` when a file starts and `0` when
   it stops, on the address given by `--status-address` (default `/playing`).
-
-## Trigger from RNBO (rnbooscquery image)
-
-On the `rnbooscquery` image, RNBO only streams OSC to **registered
-listeners**. The client therefore announces itself at startup by sending
-`/rnbo/listeners/add 127.0.0.1:<port>` to the RNBO oscquery service
-(default `127.0.0.1:1234`), exactly like the `oscserial.cpp` example does.
-You'll see:
-
-```
-osc-jack-play: registered listener '127.0.0.1:7000' with RNBO at 127.0.0.1:1234
-```
-
-After that, RNBO streams its OSC output (e.g. `oscout` messages) to the
-client's port, and `osc-jack-play` reacts to:
-
-```
-/play 0     (or /play 1 with the -1 option)
-/play 3
-/stop 1
-```
-
-Both int and float arguments are accepted. The RNBO host/port and the
-advertised listener address are configurable:
+* Can only connect to the first two inputs of the named patcher or main output.
 
 ```bash
 # RNBO runs on this Pi (defaults; usually no flags needed)
@@ -137,22 +103,11 @@ advertised listener address are configurable:
 ./osc-jack-play --no-register -c 'system:playback_%d' sound1.wav sound2.wav sound3.wav sound4.wav
 ```
 
-Make sure RNBO's oscquery service is already running when the client starts
-(registration is attempted once at startup, and again on shutdown to
-unregister).
-
-## Test without RNBO
-
-```bash
-./test_osc.py 0          # play sound1.wav
-./test_osc.py 1          # ignored if sound1.wav is still playing
-./test_osc.py --stop     # stop current playback
-```
-
-## Run as a service (optional)
+## Run as a service (recommended)
 
 `osc-jack-play.service` is a systemd unit following the conventions of the
-`gamepad.service` example in this repo. Edit it first to point at your
+`gamepad.service` example in this repo. First, edit the WorkingDirectory
+and ExecStart fields to point at your
 compiled binary and wav files (the `%%d` in the connect pattern is the
 systemd-escaped form of `%d`), then install and start it:
 
